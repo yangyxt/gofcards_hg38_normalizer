@@ -50,9 +50,9 @@ USAGE
 create_env() {
   source ~/.bashrc
   if mamba env list | awk '{print $1}' | grep -qx "${CONDA_ENV}"; then
-    mamba env update -n "${CONDA_ENV}" -f "${REPO_ROOT}/environment.yml" --prune
+    mamba env update -y -n "${CONDA_ENV}" -f "${REPO_ROOT}/environment.yml" --prune
   else
-    mamba env create -n "${CONDA_ENV}" -f "${REPO_ROOT}/environment.yml"
+    mamba env create -y -n "${CONDA_ENV}" -f "${REPO_ROOT}/environment.yml"
   fi
 }
 
