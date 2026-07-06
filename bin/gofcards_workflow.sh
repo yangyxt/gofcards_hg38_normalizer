@@ -54,6 +54,7 @@ create_env() {
   else
     mamba env create -y -n "${CONDA_ENV}" -f "${REPO_ROOT}/environment.yml"
   fi
+  mamba run -n "${CONDA_ENV}" python -m pip install -e "${REPO_ROOT}"
 }
 
 run_py() {
