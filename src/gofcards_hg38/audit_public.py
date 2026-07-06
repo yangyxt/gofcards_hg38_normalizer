@@ -25,6 +25,17 @@ def _read_public_records(path: str | Path) -> pd.DataFrame:
     return df.dropna(how="all").copy()
 
 
+def _collapse_by_allele(df: pd.DataFrame, row_col: str) -> pd.DataFrame:
+    coord = df[["allele_key", *ALLELE_COLUMNS]].drop_duplicates("allele_key")
+    values = df.groupby("allele_key", dropna=False).agg(
+        Gene_Symbol=("Gene_Symbol", lambda x: ";".join(sorted({str(v) for v in x if pd.notna(v) and str(v)}))),
+        Transcript=("Transcript", lambda x: ";".join(sorted({str(v) for v in x if pd.notna(v) and str(v)}))),
+        row_numbers=(row_col, lambda x: ";".join(str(v) for v in x)),
+        source_record_count=(row_col, "count"),
+    )
+    return coord.merge(values.reset_index(), on="allele_key", how="left")
+
+
 def audit_public_excel(backend_xlsx: str | Path, public_xlsx: str | Path, out_xlsx: str | Path) -> None:
     backend = normalize_backend_frame(_read_backend_records(backend_xlsx))
     public = normalize_public_frame(_read_public_records(public_xlsx))
@@ -36,8 +47,8 @@ def audit_public_excel(backend_xlsx: str | Path, public_xlsx: str | Path, out_xl
     backend["backend_row_number"] = range(2, len(backend) + 2)
     public["public_row_number"] = range(2, len(public) + 2)
 
-    backend_keys = backend[["allele_key", *ALLELE_COLUMNS, "Gene_Symbol", "Transcript", "backend_row_number"]].drop_duplicates()
-    public_keys = public[["allele_key", *ALLELE_COLUMNS, "Gene_Symbol", "Transcript", "public_row_number"]].drop_duplicates()
+    backend_keys = _collapse_by_allele(backend, "backend_row_number")
+    public_keys = _collapse_by_allele(public, "public_row_number")
 
     merged = backend_keys.merge(
         public_keys,
@@ -89,4 +100,3 @@ def audit_public_excel(backend_xlsx: str | Path, public_xlsx: str | Path, out_xl
             "gene_tx_mismatches": mismatched.drop(columns=["_merge"]),
         },
     )
-
