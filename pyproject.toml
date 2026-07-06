@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gofcards-hg38-normalizer"
+version = "0.1.0"
+description = "Normalize GoFCards variants with hg38 coordinates, FASTA REF checks, VEP HGVS, and TransVar cross-checks."
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=2.2",
+  "openpyxl>=3.1",
+  "requests>=2.32",
+  "pyfaidx>=0.8",
+  "tqdm>=4.66",
+]
+
+[project.scripts]
+gofcards-hg38 = "gofcards_hg38.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

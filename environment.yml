@@ -1,0 +1,17 @@
+name: gofcards_hg38
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10
+  - pandas>=2.2
+  - openpyxl>=3.1
+  - requests>=2.32
+  - pyfaidx>=0.8
+  - tqdm>=4.66
+  - biopython>=1.84
+  - bcftools>=1.20
+  - transvar=2.5.10.20211024
+  - pip
+
