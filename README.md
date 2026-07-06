@@ -3,6 +3,13 @@
 Standalone workflow to rebuild a current GoFCards variant table around stable
 variant-level evidence instead of trusting one exported coordinate table.
 
+The ultimate deliverable is `variant_transcript_table` in the final workbook:
+one row per GoFCards allele, reference assembly, and VEP transcript annotation,
+with clear symbol, transcript ID, HGVSc, HGVSp, hg19 genomic position/ref/alt,
+and hg38 genomic position/ref/alt. The companion `preferred_transcript_table`
+keeps one preferred transcript row per allele and assembly, ranked by MANE
+Select, MANE Plus Clinical, canonical transcript, then any transcript with HGVS.
+
 The workflow:
 
 1. Pulls the GoFCards backend SNV and Indel tables.
@@ -70,6 +77,8 @@ Default output paths under `work/`:
 - `vep_outputs/gofcards_vep_parsed.xlsx`: parsed VEP MANE/HGVS output.
 - `transvar/`: TransVar query files, runner, and optional raw outputs.
 - `gofcards_hg38_normalized_workbook.xlsx`: integrated final workbook.
+  - `variant_transcript_table`: full transcript-level target table.
+  - `preferred_transcript_table`: one preferred transcript row per allele and assembly.
 
 ## Smoke Test Status
 

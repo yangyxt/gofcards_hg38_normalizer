@@ -24,7 +24,7 @@ def _vcf_escape(value: object) -> str:
 
 def _vcf_id(prefix: str, key: str, index: int) -> str:
     safe = quote(key, safe="").replace("%", "_")
-    return f"{prefix}_{index}_{safe[:80]}"
+    return f"{prefix}_{index}_{safe}"
 
 
 def _write_vcf(rows: list[dict], path: str | Path) -> None:
@@ -119,13 +119,34 @@ def _read_vep_tsv(path: str | Path) -> pd.DataFrame:
     return pd.read_csv(StringIO("".join(kept)), sep="\t", dtype=object)
 
 
-def parse_vep(hg19_vep_tsv: str | Path, hg38_vep_tsv: str | Path, out_xlsx: str | Path) -> None:
+def _attach_allele_keys(df: pd.DataFrame, key_xlsx: str | Path | None) -> pd.DataFrame:
+    if df.empty or key_xlsx is None or not Path(key_xlsx).exists() or "Uploaded_variation" not in df.columns:
+        return df
+    key = read_excel(key_xlsx, 0)
+    if "vcf_id" not in key.columns or "allele_key" not in key.columns:
+        return df
+    merged = df.merge(
+        key[["assembly", "vcf_id", "allele_key"]].drop_duplicates(),
+        left_on=["assembly", "Uploaded_variation"],
+        right_on=["assembly", "vcf_id"],
+        how="left",
+    )
+    return merged.drop(columns=["vcf_id"])
+
+
+def parse_vep(
+    hg19_vep_tsv: str | Path,
+    hg38_vep_tsv: str | Path,
+    out_xlsx: str | Path,
+    vep_input_key_xlsx: str | Path | None = None,
+) -> None:
     hg19 = _read_vep_tsv(hg19_vep_tsv)
     hg38 = _read_vep_tsv(hg38_vep_tsv)
     if not hg19.empty:
         hg19.insert(0, "assembly", "hg19")
     if not hg38.empty:
         hg38.insert(0, "assembly", "hg38")
+    hg19 = _attach_allele_keys(hg19, vep_input_key_xlsx)
+    hg38 = _attach_allele_keys(hg38, vep_input_key_xlsx)
     both = pd.concat([hg19, hg38], ignore_index=True) if not (hg19.empty and hg38.empty) else pd.DataFrame()
     write_excel(out_xlsx, {"vep_all": both, "vep_hg19": hg19, "vep_hg38": hg38})
-

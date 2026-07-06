@@ -139,6 +139,7 @@ parse_vep_outputs() {
   run_py parse-vep \
     --hg19-vep-tsv "${VEP_OUTPUT_DIR}/gofcards.hg19.vep.tsv" \
     --hg38-vep-tsv "${VEP_OUTPUT_DIR}/gofcards.hg38.vep.tsv" \
+    --vep-input-key-xlsx "${VEP_INPUT_DIR}/gofcards_vep_input_key.xlsx" \
     --out-xlsx "${VEP_OUTPUT_DIR}/gofcards_vep_parsed.xlsx"
 }
 

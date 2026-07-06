@@ -58,8 +58,16 @@ def build_parser() -> argparse.ArgumentParser:
     vep_parse = sub.add_parser("parse-vep", help="Parse VEP tab outputs.")
     vep_parse.add_argument("--hg19-vep-tsv", required=True)
     vep_parse.add_argument("--hg38-vep-tsv", required=True)
+    vep_parse.add_argument("--vep-input-key-xlsx", default=None)
     vep_parse.add_argument("--out-xlsx", required=True)
-    vep_parse.set_defaults(func=lambda args: parse_vep(args.hg19_vep_tsv, args.hg38_vep_tsv, args.out_xlsx))
+    vep_parse.set_defaults(
+        func=lambda args: parse_vep(
+            args.hg19_vep_tsv,
+            args.hg38_vep_tsv,
+            args.out_xlsx,
+            args.vep_input_key_xlsx,
+        )
+    )
 
     transvar = sub.add_parser("write-transvar-queries", help="Write TransVar query files and runner.")
     transvar.add_argument("--input-xlsx", required=True)
