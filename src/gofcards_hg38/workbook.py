@@ -202,7 +202,16 @@ def _build_transcript_table(core: pd.DataFrame, vep_all: pd.DataFrame) -> pd.Dat
             "Uploaded_variation": merged["Uploaded_variation"],
         }
     )
-    return out[TRANSCRIPT_TABLE_COLUMNS]
+    out = out[TRANSCRIPT_TABLE_COLUMNS]
+
+    # Preserve alleles that VEP skipped, e.g. source records with incomplete
+    # indel alleles. The final table is also a coordinate/ref-alt audit table,
+    # so every GoFCards allele must remain visible even without transcript HGVS.
+    vep_keys = set(out["allele_key"].dropna().astype(str))
+    missing_core = core.loc[~core["allele_key"].astype(str).isin(vep_keys)].copy()
+    if not missing_core.empty:
+        out = pd.concat([out, _core_only_transcript_table(missing_core)], ignore_index=True)
+    return out
 
 
 def _preferred_rank(row: pd.Series) -> tuple[int, str]:
