@@ -95,7 +95,7 @@ def fetch_table_records(
     page_size: int = 5000,
     retry: RetryConfig | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    variant_type = variant_type.upper()
+    variant_type = "Indel" if variant_type.lower() == "indel" else variant_type.upper()
     if variant_type not in TABLE_ENDPOINTS:
         raise ValueError(f"variant_type must be one of {sorted(TABLE_ENDPOINTS)}")
     session = requests.Session()
@@ -159,4 +159,3 @@ def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
             if line:
                 rows.append(json.loads(line))
     return rows
-

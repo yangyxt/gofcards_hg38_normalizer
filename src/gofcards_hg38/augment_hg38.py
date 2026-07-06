@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -73,10 +74,13 @@ def augment_hg38(
     unique = df.drop_duplicates("allele_key")[["allele_key", *ALLELE_COLUMNS]].copy()
 
     cache = _load_cache(cache_jsonl)
-    for _, row in unique.iterrows():
+    total = len(unique)
+    for index, (_, row) in enumerate(unique.iterrows(), start=1):
         key = str(row["allele_key"])
         if key in cache:
             continue
+        if index == 1 or index % 100 == 0:
+            print(f"Querying GoFCards summary {index}/{total}: {key}", file=sys.stderr)
         record = {col: row[col] for col in ALLELE_COLUMNS}
         try:
             response = fetch_summary(record)
@@ -106,4 +110,3 @@ def augment_hg38(
         ]
     )
     write_excel(out_xlsx, {"augmented_records": augmented, "unique_summary": flat_df, "summary": summary})
-

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -14,7 +15,9 @@ def pull_backend(out_xlsx: str | Path, raw_jsonl: str | Path, page_size: int = 5
     all_records: list[dict] = []
     raw_rows: list[dict] = []
     for variant_type in ("SNV", "Indel"):
+        print(f"Pulling GoFCards backend {variant_type} table...", file=sys.stderr)
         records, pages = fetch_table_records(variant_type, page_size=page_size)
+        print(f"Pulled {len(records)} {variant_type} records.", file=sys.stderr)
         all_records.extend(records)
         for page in pages:
             raw_rows.append({"variant_type": variant_type, "response": page})
@@ -48,4 +51,3 @@ def download_public_excel(url: str | None, out_xlsx: str | Path) -> None:
         "last_modified": resp.headers.get("Last-Modified"),
     }
     out.with_suffix(out.suffix + ".metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-
