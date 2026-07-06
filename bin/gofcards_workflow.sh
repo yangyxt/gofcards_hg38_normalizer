@@ -49,7 +49,11 @@ USAGE
 
 create_env() {
   source ~/.bashrc
-  mamba env update -n "${CONDA_ENV}" -f "${REPO_ROOT}/environment.yml" --prune
+  if mamba env list | awk '{print $1}' | grep -qx "${CONDA_ENV}"; then
+    mamba env update -n "${CONDA_ENV}" -f "${REPO_ROOT}/environment.yml" --prune
+  else
+    mamba env create -n "${CONDA_ENV}" -f "${REPO_ROOT}/environment.yml"
+  fi
 }
 
 run_py() {
@@ -195,4 +199,3 @@ main() {
 }
 
 main "$@"
-
