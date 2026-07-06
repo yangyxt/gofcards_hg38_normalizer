@@ -57,7 +57,7 @@ create_env() {
 }
 
 run_py() {
-  PYTHONPATH="${REPO_ROOT}/src:${PYTHONPATH:-}" python -m gofcards_hg38.cli "$@"
+  PYTHONNOUSERSITE=1 PYTHONPATH="${REPO_ROOT}/src:${PYTHONPATH:-}" python -m gofcards_hg38.cli "$@"
 }
 
 pull_backend_tables() {

@@ -4,7 +4,16 @@ from pathlib import Path
 from typing import Mapping
 
 import pandas as pd
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Alignment
+
+
+def _excel_safe_value(value: object) -> object:
+    if value is None:
+        return ""
+    if isinstance(value, (int, float)):
+        return value
+    return ILLEGAL_CHARACTERS_RE.sub("", str(value))
 
 
 def ensure_parent(path: str | Path) -> Path:
@@ -17,7 +26,7 @@ def stringify_for_excel(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     for col in out.columns:
         if out[col].dtype == "object":
-            out[col] = out[col].map(lambda x: "" if x is None else x)
+            out[col] = out[col].map(_excel_safe_value)
     return out
 
 
@@ -44,4 +53,3 @@ def write_excel(path: str | Path, sheets: Mapping[str, pd.DataFrame]) -> None:
 
 def read_excel(path: str | Path, sheet_name: str | int = 0) -> pd.DataFrame:
     return pd.read_excel(path, sheet_name=sheet_name, dtype=object)
-
