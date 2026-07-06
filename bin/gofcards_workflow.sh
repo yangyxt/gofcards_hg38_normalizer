@@ -82,7 +82,8 @@ augment_hg38() {
   run_py augment-hg38 \
     --input-xlsx "${BACKEND_XLSX}" \
     --out-xlsx "${AUGMENTED_XLSX}" \
-    --cache-jsonl "${SUMMARY_CACHE}"
+    --cache-jsonl "${SUMMARY_CACHE}" \
+    --workers "${SUMMARY_WORKERS:-1}"
 }
 
 validate_hg38_refalt() {

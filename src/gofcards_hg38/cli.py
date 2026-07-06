@@ -40,8 +40,15 @@ def build_parser() -> argparse.ArgumentParser:
     augment.add_argument("--out-xlsx", required=True)
     augment.add_argument("--cache-jsonl", required=True)
     augment.add_argument("--sleep-seconds", type=float, default=0.15)
+    augment.add_argument("--workers", type=int, default=1)
     augment.set_defaults(
-        func=lambda args: augment_hg38(args.input_xlsx, args.out_xlsx, args.cache_jsonl, args.sleep_seconds)
+        func=lambda args: augment_hg38(
+            args.input_xlsx,
+            args.out_xlsx,
+            args.cache_jsonl,
+            args.sleep_seconds,
+            args.workers,
+        )
     )
 
     refalt = sub.add_parser("validate-refalt", help="Validate/refill hg38 REF/ALT from FASTA.")
