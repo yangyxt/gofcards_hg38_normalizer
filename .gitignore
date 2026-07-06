@@ -1,5 +1,7 @@
 work/
 work_smoke/
+work_*/
+work_probe/
 data/
 *.log
 *.tmp
