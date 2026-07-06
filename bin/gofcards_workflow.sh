@@ -105,10 +105,15 @@ vep_common_args() {
   local input_vcf="$2"
   local output_tsv="$3"
   local fasta="$4"
+  local cache_dir="${5:-${VEP_CACHE:-}}"
+  local cache_version="${6:-${VEP_CACHE_VERSION:-}}"
   local vep_bin="${VEP:-vep}"
   local cache_args=()
-  if [[ -n "${VEP_CACHE:-}" ]]; then
-    cache_args=(--cache --offline --dir_cache "${VEP_CACHE}")
+  if [[ -n "${cache_dir}" ]]; then
+    cache_args=(--cache --offline --dir_cache "${cache_dir}")
+    if [[ -n "${cache_version}" ]]; then
+      cache_args+=(--cache_version "${cache_version}")
+    fi
   fi
   "${vep_bin}" \
     --input_file "${input_vcf}" \
@@ -126,13 +131,13 @@ vep_common_args() {
 run_vep_hg19() {
   : "${HG19_FASTA:?Set HG19_FASTA before run_vep_hg19}"
   mkdir -p "${VEP_OUTPUT_DIR}"
-  vep_common_args GRCh37 "${VEP_INPUT_DIR}/gofcards.hg19.vcf" "${VEP_OUTPUT_DIR}/gofcards.hg19.vep.tsv" "${HG19_FASTA}"
+  vep_common_args GRCh37 "${VEP_INPUT_DIR}/gofcards.hg19.vcf" "${VEP_OUTPUT_DIR}/gofcards.hg19.vep.tsv" "${HG19_FASTA}" "${VEP_CACHE_HG19:-${VEP_CACHE:-}}" "${VEP_CACHE_VERSION_HG19:-${VEP_CACHE_VERSION:-}}"
 }
 
 run_vep_hg38() {
   : "${HG38_FASTA:?Set HG38_FASTA before run_vep_hg38}"
   mkdir -p "${VEP_OUTPUT_DIR}"
-  vep_common_args GRCh38 "${VEP_INPUT_DIR}/gofcards.hg38.vcf" "${VEP_OUTPUT_DIR}/gofcards.hg38.vep.tsv" "${HG38_FASTA}"
+  vep_common_args GRCh38 "${VEP_INPUT_DIR}/gofcards.hg38.vcf" "${VEP_OUTPUT_DIR}/gofcards.hg38.vep.tsv" "${HG38_FASTA}" "${VEP_CACHE_HG38:-${VEP_CACHE:-}}" "${VEP_CACHE_VERSION_HG38:-${VEP_CACHE_VERSION:-}}"
 }
 
 parse_vep_outputs() {
@@ -149,7 +154,7 @@ run_transvar_crosscheck() {
     --input-xlsx "${REFALT_XLSX}" \
     --out-dir "${TRANSVAR_DIR}"
   if command -v transvar >/dev/null 2>&1; then
-    bash "${TRANSVAR_DIR}/run_transvar.sh"
+    bash "${TRANSVAR_DIR}/run_transvar.sh" || echo "TransVar cross-check failed; continuing because it is not the final transcript authority." >&2
   else
     echo "transvar is not on PATH; generated ${TRANSVAR_DIR}/run_transvar.sh only." >&2
   fi
