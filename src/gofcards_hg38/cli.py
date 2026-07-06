@@ -5,6 +5,10 @@ import argparse
 from .audit_public import audit_public_excel
 from .augment_hg38 import augment_hg38
 from .pull_backend import download_public_excel, pull_backend
+from .refalt import validate_refalt
+from .transvar_io import write_transvar_queries
+from .vep_io import parse_vep, write_vep_inputs
+from .workbook import build_workbook
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,11 +44,43 @@ def build_parser() -> argparse.ArgumentParser:
         func=lambda args: augment_hg38(args.input_xlsx, args.out_xlsx, args.cache_jsonl, args.sleep_seconds)
     )
 
-    sub.add_parser("validate-refalt", help="Validate/refill hg38 REF/ALT from FASTA.")
-    sub.add_parser("write-vep-inputs", help="Write hg19 and hg38 VCF inputs for VEP.")
-    sub.add_parser("parse-vep", help="Parse VEP tab outputs.")
-    sub.add_parser("write-transvar-queries", help="Write TransVar query files and runner.")
-    sub.add_parser("build-workbook", help="Build final integrated workbook.")
+    refalt = sub.add_parser("validate-refalt", help="Validate/refill hg38 REF/ALT from FASTA.")
+    refalt.add_argument("--input-xlsx", required=True)
+    refalt.add_argument("--hg38-fasta", required=True)
+    refalt.add_argument("--out-xlsx", required=True)
+    refalt.set_defaults(func=lambda args: validate_refalt(args.input_xlsx, args.hg38_fasta, args.out_xlsx))
+
+    vep_inputs = sub.add_parser("write-vep-inputs", help="Write hg19 and hg38 VCF inputs for VEP.")
+    vep_inputs.add_argument("--input-xlsx", required=True)
+    vep_inputs.add_argument("--out-dir", required=True)
+    vep_inputs.set_defaults(func=lambda args: write_vep_inputs(args.input_xlsx, args.out_dir))
+
+    vep_parse = sub.add_parser("parse-vep", help="Parse VEP tab outputs.")
+    vep_parse.add_argument("--hg19-vep-tsv", required=True)
+    vep_parse.add_argument("--hg38-vep-tsv", required=True)
+    vep_parse.add_argument("--out-xlsx", required=True)
+    vep_parse.set_defaults(func=lambda args: parse_vep(args.hg19_vep_tsv, args.hg38_vep_tsv, args.out_xlsx))
+
+    transvar = sub.add_parser("write-transvar-queries", help="Write TransVar query files and runner.")
+    transvar.add_argument("--input-xlsx", required=True)
+    transvar.add_argument("--out-dir", required=True)
+    transvar.set_defaults(func=lambda args: write_transvar_queries(args.input_xlsx, args.out_dir))
+
+    workbook = sub.add_parser("build-workbook", help="Build final integrated workbook.")
+    workbook.add_argument("--refalt-xlsx", required=True)
+    workbook.add_argument("--audit-xlsx", required=True)
+    workbook.add_argument("--vep-xlsx", required=True)
+    workbook.add_argument("--transvar-dir", required=True)
+    workbook.add_argument("--out-xlsx", required=True)
+    workbook.set_defaults(
+        func=lambda args: build_workbook(
+            args.refalt_xlsx,
+            args.audit_xlsx,
+            args.vep_xlsx,
+            args.transvar_dir,
+            args.out_xlsx,
+        )
+    )
     return parser
 
 
