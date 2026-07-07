@@ -9,6 +9,14 @@ import pandas as pd
 
 from .io_utils import ensure_parent, read_excel
 
+HGVS_MATCH_STATUSES = {
+    "both_cdna_protein_match",
+    "protein_only_match",
+    "cdna_only_match",
+}
+GENOMIC_ONLY_STATUSES = {"no_parseable_gofcards_hgvs"}
+INVALID_SYMBOLS = {"", "-", ".", "NA", "N/A", "UNKNOWN"}
+
 
 def _clean(value: object) -> str:
     if value is None or pd.isna(value):
@@ -35,17 +43,20 @@ def _normalize_symbol(value: object) -> str:
     return _clean(value).upper()
 
 
-def _genomic_key(chrom: object, pos: object, ref: object, alt: object, *, allow_sparse: bool = False) -> str:
+def _first_nonblank(*values: object) -> str:
+    for value in values:
+        text = _clean(value)
+        if text:
+            return text
+    return ""
+
+
+def _genomic_key(chrom: object, pos: object, ref: object, alt: object) -> str:
     chrom_text = _clean(chrom)
     pos_text = _clean(pos)
     ref_text = _clean(ref)
     alt_text = _clean(alt)
-    if not chrom_text or not pos_text:
-        return ""
-    if allow_sparse:
-        if not ref_text and not alt_text:
-            return ""
-    elif not ref_text or not alt_text:
+    if not chrom_text or not pos_text or not ref_text or not alt_text:
         return ""
     return "|".join([chrom_text, pos_text, ref_text, alt_text])
 
@@ -141,6 +152,15 @@ def export_priva_gof_tsv(
         if col not in df.columns:
             df[col] = ""
 
+    df = df.where(pd.notna(df), "")
+    df["gofcards_hgvs_match_status"] = df["gofcards_hgvs_match_status"].map(_clean)
+    keep_status = HGVS_MATCH_STATUSES | GENOMIC_ONLY_STATUSES
+    df = df[df["gofcards_hgvs_match_status"].isin(keep_status)].copy()
+    if df.empty:
+        raise ValueError(
+            f"{sheet} has no GoFCards rows with VEP-concordant HGVS or coordinate-only status"
+        )
+
     gofcards_symbol = df["gofcards_symbol_resolved"].where(
         df["gofcards_symbol_resolved"].fillna("").astype(str).str.strip() != "",
         df["gofcards_symbol"],
@@ -153,7 +173,41 @@ def export_priva_gof_tsv(
         vep_symbol.fillna("").astype(str).str.strip() != "",
         gofcards_symbol,
     )
-    normalized_hgvsp = df["HGVSp"].map(_normalize_hgvsp)
+    is_genomic_only = df["gofcards_hgvs_match_status"].isin(GENOMIC_ONLY_STATUSES)
+    hgvsc = df["HGVSc"].where(~is_genomic_only, "")
+    hgvsp = df["HGVSp"].where(~is_genomic_only, "")
+    hgvsp_key = hgvsp.map(_hgvsp_key)
+    vep_assembly = df["assembly"].where(~is_genomic_only, "")
+    vep_transcript = df["vep_transcript"].where(~is_genomic_only, "")
+    feature_type = df["feature_type"].where(~is_genomic_only, "")
+    consequence = df["consequence"].where(~is_genomic_only, "")
+    canonical_transcript = df["CANONICAL"].where(~is_genomic_only, "")
+
+    hg19_pos = [
+        _first_nonblank(vcf_pos, start)
+        for vcf_pos, start in zip(df["hg19_vcf_pos"], df["hg19_start"])
+    ]
+    hg19_ref = [
+        _first_nonblank(vcf_ref, raw_ref)
+        for vcf_ref, raw_ref in zip(df["hg19_vcf_ref"], df["hg19_ref"])
+    ]
+    hg19_alt = [
+        _first_nonblank(vcf_alt, raw_alt)
+        for vcf_alt, raw_alt in zip(df["hg19_vcf_alt"], df["hg19_alt"])
+    ]
+    hg38_pos = [
+        _first_nonblank(vcf_pos, start)
+        for vcf_pos, start in zip(df["hg38_vcf_pos"], df["hg38_start"])
+    ]
+    hg38_ref = [
+        _first_nonblank(vcf_ref, raw_ref)
+        for vcf_ref, raw_ref in zip(df["hg38_vcf_ref"], df["hg38_ref"])
+    ]
+    hg38_alt = [
+        _first_nonblank(vcf_alt, raw_alt)
+        for vcf_alt, raw_alt in zip(df["hg38_vcf_alt"], df["hg38_alt"])
+    ]
+
     metadata = _core_metadata_by_allele(workbook_xlsx)
 
     def meta_value(allele_key: object, field: str) -> str:
@@ -164,50 +218,28 @@ def export_priva_gof_tsv(
             "source": "GoFCards",
             "mechanism": "GOF",
             "build": "hg19_and_hg38",
-            "symbol": match_symbol.map(_normalize_symbol),
-            "hgvsp_key": df["HGVSp"].map(_hgvsp_key),
-            "gofcards_symbol": df["gofcards_symbol"].map(_clean),
-            "gofcards_symbol_resolved": gofcards_symbol.map(_clean),
-            "vep_symbol": df["vep_symbol"].map(_clean),
-            "vep_symbol_resolved": vep_symbol.map(_clean),
-            "match_symbol": match_symbol.map(_normalize_symbol),
-            "source_refseq_transcript": df["source_refseq_transcript"].map(_clean),
-            "vep_transcript": df["vep_transcript"].map(_clean),
-            "HGVSc": df["HGVSc"].map(_clean),
-            "HGVSp": df["HGVSp"].map(_clean),
-            "normalized_hgvsp": normalized_hgvsp,
-            "gofcards_hgvsc_key": df["gofcards_hgvsc_key"].map(_clean),
-            "gofcards_hgvsp_key": df["gofcards_hgvsp_key"].map(_clean),
-            "vep_hgvsc_key": df["vep_hgvsc_key"].map(_clean),
-            "vep_hgvsp_key": df["vep_hgvsp_key"].map(_clean),
-            "gofcards_gene_match": df["gofcards_gene_match"].map(_clean),
-            "gofcards_hgvsc_match": df["gofcards_hgvsc_match"].map(_clean),
-            "gofcards_hgvsp_match": df["gofcards_hgvsp_match"].map(_clean),
-            "gofcards_hgvs_match_status": df["gofcards_hgvs_match_status"].map(_clean),
-            "canonical_transcript": df["CANONICAL"].map(_clean),
+            "HGNC_Symbol": match_symbol.map(_normalize_symbol),
+            "VEP_assembly": vep_assembly.map(_clean),
+            "VEP_transcript": vep_transcript.map(_clean),
+            "feature_type": feature_type.map(_clean),
+            "consequence": consequence.map(_clean),
+            "HGVSc": hgvsc.map(_clean),
+            "HGVSp": hgvsp.map(_clean),
+            "hgvsp_key": hgvsp_key,
+            "match_status": df["gofcards_hgvs_match_status"].map(_clean),
+            "raw_GoFCards_HGVS": df["gofcards_AAChange_refGene"].map(_clean),
+            "GoFCards_transcript": df["source_refseq_transcript"].map(_clean),
+            "canonical_transcript": canonical_transcript.map(_clean),
             "hg19_chrom": df["hg19_chrom"].map(_clean),
-            "hg19_start": df["hg19_start"].map(_clean),
-            "hg19_end": df["hg19_end"].map(_clean),
-            "hg19_ref": df["hg19_ref"].map(_clean),
-            "hg19_alt": df["hg19_alt"].map(_clean),
-            "hg19_vcf_pos": df["hg19_vcf_pos"].map(_clean),
-            "hg19_vcf_ref": df["hg19_vcf_ref"].map(_clean),
-            "hg19_vcf_alt": df["hg19_vcf_alt"].map(_clean),
+            "hg19_pos": pd.Series(hg19_pos, index=df.index).map(_clean),
+            "hg19_ref": pd.Series(hg19_ref, index=df.index).map(_clean),
+            "hg19_alt": pd.Series(hg19_alt, index=df.index).map(_clean),
             "hg19_vcf_status": df["hg19_vcf_status"].map(_clean),
-            "chrom": df["hg19_chrom"].map(lambda value: f"chr{_clean(value)}" if _clean(value) and not _clean(value).startswith("chr") else _clean(value)),
-            "pos": df["hg19_start"].map(_clean),
-            "ref": df["hg19_ref"].map(_clean),
-            "alt": df["hg19_alt"].map(_clean),
             "hg38_chrom": df["hg38_chrom"].map(_clean),
-            "hg38_start": df["hg38_start"].map(_clean),
-            "hg38_end": df["hg38_end"].map(_clean),
-            "hg38_ref": df["hg38_ref"].map(_clean),
-            "hg38_alt": df["hg38_alt"].map(_clean),
-            "hg38_vcf_pos": df["hg38_vcf_pos"].map(_clean),
-            "hg38_vcf_ref": df["hg38_vcf_ref"].map(_clean),
-            "hg38_vcf_alt": df["hg38_vcf_alt"].map(_clean),
+            "hg38_pos": pd.Series(hg38_pos, index=df.index).map(_clean),
+            "hg38_ref": pd.Series(hg38_ref, index=df.index).map(_clean),
+            "hg38_alt": pd.Series(hg38_alt, index=df.index).map(_clean),
             "hg38_refalt_status": df["hg38_refalt_status"].map(_clean),
-            "gofcards_AAChange_refGene": df["gofcards_AAChange_refGene"].map(_clean),
             "gofcards_accession_id": df["summary_rsID"].map(_clean),
             "gofcards_variant_id": df["allele_key"].map(_clean),
             "disease": df["allele_key"].map(lambda value: meta_value(value, "disease")),
@@ -215,27 +247,20 @@ def export_priva_gof_tsv(
             "pscore": df["allele_key"].map(lambda value: meta_value(value, "pscore")),
             "function": df["allele_key"].map(lambda value: meta_value(value, "function")),
             "pathway": df["allele_key"].map(lambda value: meta_value(value, "pathway")),
-            "transcript": df["allele_key"].map(lambda value: meta_value(value, "transcript")),
             "derived_on": date.today().isoformat(),
             "allele_key": df["allele_key"].map(_clean),
         }
     )
     out["hg19_genomic_key"] = [
-        _genomic_key(chrom, pos, ref, alt, allow_sparse=True)
-        for chrom, pos, ref, alt in zip(out["hg19_chrom"], out["hg19_start"], out["hg19_ref"], out["hg19_alt"])
-    ]
-    out["hg19_vcf_key"] = [
         _genomic_key(chrom, pos, ref, alt)
-        for chrom, pos, ref, alt in zip(out["hg19_chrom"], out["hg19_vcf_pos"], out["hg19_vcf_ref"], out["hg19_vcf_alt"])
+        for chrom, pos, ref, alt in zip(out["hg19_chrom"], out["hg19_pos"], out["hg19_ref"], out["hg19_alt"])
     ]
+    out["hg19_vcf_key"] = out["hg19_genomic_key"]
     out["hg38_genomic_key"] = [
-        _genomic_key(chrom, pos, ref, alt, allow_sparse=True)
-        for chrom, pos, ref, alt in zip(out["hg38_chrom"], out["hg38_start"], out["hg38_ref"], out["hg38_alt"])
-    ]
-    out["hg38_vcf_key"] = [
         _genomic_key(chrom, pos, ref, alt)
-        for chrom, pos, ref, alt in zip(out["hg38_chrom"], out["hg38_vcf_pos"], out["hg38_vcf_ref"], out["hg38_vcf_alt"])
+        for chrom, pos, ref, alt in zip(out["hg38_chrom"], out["hg38_pos"], out["hg38_ref"], out["hg38_alt"])
     ]
+    out["hg38_vcf_key"] = out["hg38_genomic_key"]
     key_types: list[str] = []
     for _, row in out.iterrows():
         keys = []
@@ -251,7 +276,22 @@ def export_priva_gof_tsv(
             keys.append("hg38_vcf")
         key_types.append(";".join(keys))
     out["match_key_types"] = key_types
-    out = out.loc[(out["match_symbol"] != "") & (out["match_key_types"] != "")].drop_duplicates()
+    required = [
+        "HGNC_Symbol",
+        "hg19_chrom",
+        "hg19_pos",
+        "hg19_ref",
+        "hg19_alt",
+        "hg38_chrom",
+        "hg38_pos",
+        "hg38_ref",
+        "hg38_alt",
+        "hg19_genomic_key",
+        "hg38_genomic_key",
+    ]
+    missing_required = out[required].astype(str).apply(lambda col: col.str.strip().eq("")).any(axis=1)
+    valid_symbol = ~out["HGNC_Symbol"].astype(str).str.strip().str.upper().isin(INVALID_SYMBOLS)
+    out = out.loc[valid_symbol & ~missing_required & (out["match_key_types"] != "")].drop_duplicates()
     out_path = ensure_parent(out_tsv)
     if str(out_path).endswith(".gz"):
         with gzip.open(out_path, "wt", encoding="utf-8", newline="") as handle:

@@ -188,7 +188,8 @@ build_workbook() {
 export_priva_gof_tsv() {
   run_py export-priva-gof-tsv \
     --workbook-xlsx "${FINAL_XLSX}" \
-    --out-tsv "${PRIVA_GOF_TSV}"
+    --out-tsv "${PRIVA_GOF_TSV}" \
+    --preferred-only
 }
 
 run_all() {
