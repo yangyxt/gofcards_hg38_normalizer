@@ -55,8 +55,9 @@ def build_parser() -> argparse.ArgumentParser:
     refalt = sub.add_parser("validate-refalt", help="Validate/refill hg38 REF/ALT from FASTA.")
     refalt.add_argument("--input-xlsx", required=True)
     refalt.add_argument("--hg38-fasta", required=True)
+    refalt.add_argument("--hg19-fasta", default=None)
     refalt.add_argument("--out-xlsx", required=True)
-    refalt.set_defaults(func=lambda args: validate_refalt(args.input_xlsx, args.hg38_fasta, args.out_xlsx))
+    refalt.set_defaults(func=lambda args: validate_refalt(args.input_xlsx, args.hg38_fasta, args.out_xlsx, args.hg19_fasta))
 
     vep_inputs = sub.add_parser("write-vep-inputs", help="Write hg19 and hg38 VCF inputs for VEP.")
     vep_inputs.add_argument("--input-xlsx", required=True)

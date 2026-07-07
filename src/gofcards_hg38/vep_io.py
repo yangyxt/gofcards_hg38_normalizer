@@ -27,6 +27,13 @@ def _vcf_id(prefix: str, key: str, index: int) -> str:
     return f"{prefix}_{index}_{safe}"
 
 
+def _clean(value: object) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() == "nan" else text
+
+
 def _write_vcf(rows: list[dict], path: str | Path) -> None:
     out = ensure_parent(path)
     with out.open("w", encoding="utf-8") as handle:
@@ -66,22 +73,26 @@ def write_vep_inputs(input_xlsx: str | Path, out_dir: str | Path) -> None:
     for idx, row in df.iterrows():
         key = str(row["allele_key"])
         hg19_id = _vcf_id("gofcards_hg19", key, idx + 1)
-        hg19_rows.append(
-            {
-                "chrom": row.get("Chr"),
-                "pos": row.get("Start"),
-                "id": hg19_id,
-                "ref": row.get("Ref"),
-                "alt": row.get("Alt"),
-                "allele_key": key,
-                "Gene_Symbol": row.get("Gene_Symbol", ""),
-            }
-        )
-        key_rows.append({"assembly": "hg19", "vcf_id": hg19_id, "allele_key": key})
+        ref19 = _clean(row.get("hg19_Ref_for_vep")) or _clean(row.get("Ref"))
+        alt19 = _clean(row.get("hg19_Alt_for_vep")) or _clean(row.get("Alt"))
+        pos19 = _clean(row.get("hg19_VCF_Pos")) or _clean(row.get("Start"))
+        if ref19 and alt19 and pos19:
+            hg19_rows.append(
+                {
+                    "chrom": row.get("Chr"),
+                    "pos": pos19,
+                    "id": hg19_id,
+                    "ref": ref19,
+                    "alt": alt19,
+                    "allele_key": key,
+                    "Gene_Symbol": row.get("Gene_Symbol", ""),
+                }
+            )
+            key_rows.append({"assembly": "hg19", "vcf_id": hg19_id, "allele_key": key})
 
         ref38 = str(row.get("hg38_Ref_for_vep", "") or "")
         alt38 = str(row.get("hg38_Alt_for_vep", "") or "")
-        start38 = str(row.get("hg38_Start", "") or "")
+        start38 = str(row.get("hg38_VCF_Pos", "") or row.get("hg38_Start", "") or "")
         if ref38 and alt38 and start38:
             hg38_id = _vcf_id("gofcards_hg38", key, idx + 1)
             hg38_rows.append(

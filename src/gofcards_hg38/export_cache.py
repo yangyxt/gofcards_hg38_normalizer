@@ -35,6 +35,21 @@ def _normalize_symbol(value: object) -> str:
     return _clean(value).upper()
 
 
+def _genomic_key(chrom: object, pos: object, ref: object, alt: object, *, allow_sparse: bool = False) -> str:
+    chrom_text = _clean(chrom)
+    pos_text = _clean(pos)
+    ref_text = _clean(ref)
+    alt_text = _clean(alt)
+    if not chrom_text or not pos_text:
+        return ""
+    if allow_sparse:
+        if not ref_text and not alt_text:
+            return ""
+    elif not ref_text or not alt_text:
+        return ""
+    return "|".join([chrom_text, pos_text, ref_text, alt_text])
+
+
 def _read_sheet_or_empty(workbook_xlsx: str | Path, sheet_name: str) -> pd.DataFrame:
     try:
         df = read_excel(workbook_xlsx, sheet_name)
@@ -106,11 +121,18 @@ def export_priva_gof_tsv(
         "hg19_end",
         "hg19_ref",
         "hg19_alt",
+        "hg19_vcf_pos",
+        "hg19_vcf_ref",
+        "hg19_vcf_alt",
+        "hg19_vcf_status",
         "hg38_chrom",
         "hg38_start",
         "hg38_end",
         "hg38_ref",
         "hg38_alt",
+        "hg38_vcf_pos",
+        "hg38_vcf_ref",
+        "hg38_vcf_alt",
         "hg38_refalt_status",
         "gofcards_AAChange_refGene",
         "summary_rsID",
@@ -168,6 +190,10 @@ def export_priva_gof_tsv(
             "hg19_end": df["hg19_end"].map(_clean),
             "hg19_ref": df["hg19_ref"].map(_clean),
             "hg19_alt": df["hg19_alt"].map(_clean),
+            "hg19_vcf_pos": df["hg19_vcf_pos"].map(_clean),
+            "hg19_vcf_ref": df["hg19_vcf_ref"].map(_clean),
+            "hg19_vcf_alt": df["hg19_vcf_alt"].map(_clean),
+            "hg19_vcf_status": df["hg19_vcf_status"].map(_clean),
             "chrom": df["hg19_chrom"].map(lambda value: f"chr{_clean(value)}" if _clean(value) and not _clean(value).startswith("chr") else _clean(value)),
             "pos": df["hg19_start"].map(_clean),
             "ref": df["hg19_ref"].map(_clean),
@@ -177,6 +203,9 @@ def export_priva_gof_tsv(
             "hg38_end": df["hg38_end"].map(_clean),
             "hg38_ref": df["hg38_ref"].map(_clean),
             "hg38_alt": df["hg38_alt"].map(_clean),
+            "hg38_vcf_pos": df["hg38_vcf_pos"].map(_clean),
+            "hg38_vcf_ref": df["hg38_vcf_ref"].map(_clean),
+            "hg38_vcf_alt": df["hg38_vcf_alt"].map(_clean),
             "hg38_refalt_status": df["hg38_refalt_status"].map(_clean),
             "gofcards_AAChange_refGene": df["gofcards_AAChange_refGene"].map(_clean),
             "gofcards_accession_id": df["summary_rsID"].map(_clean),
@@ -191,7 +220,38 @@ def export_priva_gof_tsv(
             "allele_key": df["allele_key"].map(_clean),
         }
     )
-    out = out.loc[(out["match_symbol"] != "") & (out["hgvsp_key"] != "")].drop_duplicates()
+    out["hg19_genomic_key"] = [
+        _genomic_key(chrom, pos, ref, alt, allow_sparse=True)
+        for chrom, pos, ref, alt in zip(out["hg19_chrom"], out["hg19_start"], out["hg19_ref"], out["hg19_alt"])
+    ]
+    out["hg19_vcf_key"] = [
+        _genomic_key(chrom, pos, ref, alt)
+        for chrom, pos, ref, alt in zip(out["hg19_chrom"], out["hg19_vcf_pos"], out["hg19_vcf_ref"], out["hg19_vcf_alt"])
+    ]
+    out["hg38_genomic_key"] = [
+        _genomic_key(chrom, pos, ref, alt, allow_sparse=True)
+        for chrom, pos, ref, alt in zip(out["hg38_chrom"], out["hg38_start"], out["hg38_ref"], out["hg38_alt"])
+    ]
+    out["hg38_vcf_key"] = [
+        _genomic_key(chrom, pos, ref, alt)
+        for chrom, pos, ref, alt in zip(out["hg38_chrom"], out["hg38_vcf_pos"], out["hg38_vcf_ref"], out["hg38_vcf_alt"])
+    ]
+    key_types: list[str] = []
+    for _, row in out.iterrows():
+        keys = []
+        if row["hgvsp_key"]:
+            keys.append("hgvsp")
+        if row["hg19_genomic_key"]:
+            keys.append("hg19_genomic")
+        if row["hg19_vcf_key"]:
+            keys.append("hg19_vcf")
+        if row["hg38_genomic_key"]:
+            keys.append("hg38_genomic")
+        if row["hg38_vcf_key"]:
+            keys.append("hg38_vcf")
+        key_types.append(";".join(keys))
+    out["match_key_types"] = key_types
+    out = out.loc[(out["match_symbol"] != "") & (out["match_key_types"] != "")].drop_duplicates()
     out_path = ensure_parent(out_tsv)
     if str(out_path).endswith(".gz"):
         with gzip.open(out_path, "wt", encoding="utf-8", newline="") as handle:

@@ -43,7 +43,7 @@ Functions:
 
 Required env vars for selected steps:
   HG38_FASTA              Required by validate_hg38_refalt and hg38 VEP.
-  HG19_FASTA              Required by hg19 VEP.
+  HG19_FASTA              Required by hg19 VEP; used by validate_hg38_refalt to VCF-pad hg19 indels when set.
   VEP                     Optional; defaults to "vep" if available.
   VEP_CACHE               Optional shared VEP cache directory.
   VEP_CACHE_HG19          Optional GRCh37/hg19 VEP cache directory.
@@ -94,10 +94,15 @@ augment_hg38() {
 
 validate_hg38_refalt() {
   : "${HG38_FASTA:?Set HG38_FASTA before validate_hg38_refalt}"
-  run_py validate-refalt \
-    --input-xlsx "${AUGMENTED_XLSX}" \
-    --hg38-fasta "${HG38_FASTA}" \
+  local args=(
+    --input-xlsx "${AUGMENTED_XLSX}"
+    --hg38-fasta "${HG38_FASTA}"
     --out-xlsx "${REFALT_XLSX}"
+  )
+  if [[ -n "${HG19_FASTA:-}" ]]; then
+    args+=(--hg19-fasta "${HG19_FASTA}")
+  fi
+  run_py validate-refalt "${args[@]}"
 }
 
 write_vep_inputs() {

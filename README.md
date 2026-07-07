@@ -18,8 +18,10 @@ The workflow:
 2. Downloads and audits the public Excel export.
 3. Queries the GoFCards variant summary endpoint for hg38 coordinates.
 4. Validates or refills hg38 REF/ALT from a user-supplied hg38 FASTA.
-5. Builds VEP input for hg19 and hg38 and parses VEP MANE/HGVS output.
-6. Runs TransVar as an optional cross-check, not as the final transcript authority.
+5. VCF-pads deletion/insertion records with blank source REF or ALT using the
+   supplied FASTA files, while preserving original GoFCards coordinates.
+6. Builds VEP input for hg19 and hg38 and parses VEP MANE/HGVS output.
+7. Runs TransVar as an optional cross-check, not as the final transcript authority.
 
 ## Quick Start
 
@@ -96,9 +98,10 @@ Default output paths under `work/`:
     GoFCards RefSeq-style cDNA/protein HGVS and VEP ENST/ENSP HGVS after HGNC
     symbol normalization, then falls back to MANE/canonical status.
 - `gofcards_priva_exact_gof_hgvsp.tsv.gz`: compact PriVA cache keyed by
-  normalized HGNC symbol plus exact protein change. This file is for exact
-  variant-level GoF matching only; it must not be used as gene-level GoF
-  evidence.
+  normalized HGNC symbol plus exact protein change when HGVSp is available, and
+  retaining genomic-only rows for future hg19/hg38 position/ref/alt matching.
+  This file is for variant-level GoF matching only; it must not be used as
+  gene-level GoF evidence.
 
 ## Smoke Test Status
 
@@ -124,6 +127,9 @@ additional HGVS checks; it is deliberately not used as the final authority.
 PriVA should consume the compact TSV cache for exact HGVSp matching; a match
 means the candidate protein change is represented in GoFCards, not that every
 variant in the same gene is GoF.
+Rows without HGVSp are retained with `hg19_genomic_key`, `hg19_vcf_key`,
+`hg38_genomic_key`, and `hg38_vcf_key` so a later genomic allele matching
+function can use them.
 Set `HGNC_COMPLETE_SET_TSV` to the official HGNC complete-set TSV when building
 the workbook so previous symbols and aliases such as `TMEM173/STING1` and
 `PARK2/PRKN` are reconciled before transcript ranking.
