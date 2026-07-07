@@ -43,6 +43,10 @@ def _normalize_symbol(value: object) -> str:
     return _clean(value).upper()
 
 
+def _valid_symbol_mask(values: pd.Series) -> pd.Series:
+    return ~values.map(_normalize_symbol).isin(INVALID_SYMBOLS)
+
+
 def _first_nonblank(*values: object) -> str:
     for value in values:
         text = _clean(value)
@@ -162,17 +166,14 @@ def export_priva_gof_tsv(
         )
 
     gofcards_symbol = df["gofcards_symbol_resolved"].where(
-        df["gofcards_symbol_resolved"].fillna("").astype(str).str.strip() != "",
+        _valid_symbol_mask(df["gofcards_symbol_resolved"]),
         df["gofcards_symbol"],
     )
     vep_symbol = df["vep_symbol_resolved"].where(
-        df["vep_symbol_resolved"].fillna("").astype(str).str.strip() != "",
+        _valid_symbol_mask(df["vep_symbol_resolved"]),
         df["vep_symbol"],
     )
-    match_symbol = vep_symbol.where(
-        vep_symbol.fillna("").astype(str).str.strip() != "",
-        gofcards_symbol,
-    )
+    match_symbol = vep_symbol.where(_valid_symbol_mask(vep_symbol), gofcards_symbol)
     is_genomic_only = df["gofcards_hgvs_match_status"].isin(GENOMIC_ONLY_STATUSES)
     hgvsc = df["HGVSc"].where(~is_genomic_only, "")
     hgvsp = df["HGVSp"].where(~is_genomic_only, "")
