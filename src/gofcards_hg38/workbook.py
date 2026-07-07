@@ -50,6 +50,7 @@ CORE_COLUMNS = [
     "summary_hg38_start",
     "summary_hg38_end",
     "summary_rsID",
+    "summary_AAChange_refGene",
 ]
 
 TRANSCRIPT_TABLE_COLUMNS = [
@@ -174,6 +175,20 @@ def _parse_aachange(value: object) -> list[dict[str, str]]:
 
 def _join_keys(values: list[str]) -> str:
     return ";".join(sorted({value for value in values if value}))
+
+
+def _has_parseable_aachange(value: object) -> bool:
+    return any(entry["hgvsc"] or entry["hgvsp"] for entry in _parse_aachange(value))
+
+
+def _select_aachange(raw_value: object, summary_value: object) -> str:
+    raw = _clean(raw_value)
+    summary = _clean(summary_value)
+    if _has_parseable_aachange(raw):
+        return raw
+    if _has_parseable_aachange(summary):
+        return summary
+    return raw or summary
 
 
 def _annotate_hgvs_matches(table: pd.DataFrame) -> pd.DataFrame:
@@ -317,7 +332,10 @@ def _core_only_transcript_table(core: pd.DataFrame) -> pd.DataFrame:
             "hg38_fasta_ref": core["hg38_REF_fasta"],
             "hg38_refalt_status": core["hg38_refalt_status"],
             "hg38_refalt_needs_review": core["hg38_refalt_needs_review"],
-            "gofcards_AAChange_refGene": core["AAChange_refGene"],
+            "gofcards_AAChange_refGene": [
+                _select_aachange(raw, summary)
+                for raw, summary in zip(core["AAChange_refGene"], core["summary_AAChange_refGene"])
+            ],
             "summary_rsID": core["summary_rsID"],
             "allele_key": core["allele_key"],
             "Uploaded_variation": "",
@@ -390,7 +408,10 @@ def _build_transcript_table(core: pd.DataFrame, vep_all: pd.DataFrame) -> pd.Dat
             "hg38_fasta_ref": merged["hg38_REF_fasta"],
             "hg38_refalt_status": merged["hg38_refalt_status"],
             "hg38_refalt_needs_review": merged["hg38_refalt_needs_review"],
-            "gofcards_AAChange_refGene": merged["AAChange_refGene"],
+            "gofcards_AAChange_refGene": [
+                _select_aachange(raw, summary)
+                for raw, summary in zip(merged["AAChange_refGene"], merged["summary_AAChange_refGene"])
+            ],
             "summary_rsID": merged["summary_rsID"],
             "allele_key": merged["allele_key"],
             "Uploaded_variation": merged["Uploaded_variation"],
