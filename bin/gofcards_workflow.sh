@@ -119,12 +119,16 @@ vep_common_args() {
   local fasta="$4"
   local cache_dir="${5:-${VEP_CACHE:-}}"
   local cache_version="${6:-${VEP_CACHE_VERSION:-}}"
+  local cache_merged="${7:-${VEP_CACHE_MERGED:-}}"
   local vep_bin="${VEP:-vep}"
   local cache_args=()
   if [[ -n "${cache_dir}" ]]; then
     cache_args=(--cache --offline --dir_cache "${cache_dir}")
     if [[ -n "${cache_version}" ]]; then
       cache_args+=(--cache_version "${cache_version}")
+    fi
+    if [[ "${cache_merged}" == "1" || "${cache_merged}" == "true" || "${cache_merged}" == "TRUE" || "${cache_merged}" == "yes" || "${cache_merged}" == "YES" ]]; then
+      cache_args+=(--merged)
     fi
   fi
   "${vep_bin}" \
@@ -143,13 +147,13 @@ vep_common_args() {
 run_vep_hg19() {
   : "${HG19_FASTA:?Set HG19_FASTA before run_vep_hg19}"
   mkdir -p "${VEP_OUTPUT_DIR}"
-  vep_common_args GRCh37 "${VEP_INPUT_DIR}/gofcards.hg19.vcf" "${VEP_OUTPUT_DIR}/gofcards.hg19.vep.tsv" "${HG19_FASTA}" "${VEP_CACHE_HG19:-${VEP_CACHE:-}}" "${VEP_CACHE_VERSION_HG19:-${VEP_CACHE_VERSION:-}}"
+  vep_common_args GRCh37 "${VEP_INPUT_DIR}/gofcards.hg19.vcf" "${VEP_OUTPUT_DIR}/gofcards.hg19.vep.tsv" "${HG19_FASTA}" "${VEP_CACHE_HG19:-${VEP_CACHE:-}}" "${VEP_CACHE_VERSION_HG19:-${VEP_CACHE_VERSION:-}}" "${VEP_CACHE_MERGED_HG19:-${VEP_CACHE_MERGED:-}}"
 }
 
 run_vep_hg38() {
   : "${HG38_FASTA:?Set HG38_FASTA before run_vep_hg38}"
   mkdir -p "${VEP_OUTPUT_DIR}"
-  vep_common_args GRCh38 "${VEP_INPUT_DIR}/gofcards.hg38.vcf" "${VEP_OUTPUT_DIR}/gofcards.hg38.vep.tsv" "${HG38_FASTA}" "${VEP_CACHE_HG38:-${VEP_CACHE:-}}" "${VEP_CACHE_VERSION_HG38:-${VEP_CACHE_VERSION:-}}"
+  vep_common_args GRCh38 "${VEP_INPUT_DIR}/gofcards.hg38.vcf" "${VEP_OUTPUT_DIR}/gofcards.hg38.vep.tsv" "${HG38_FASTA}" "${VEP_CACHE_HG38:-${VEP_CACHE:-}}" "${VEP_CACHE_VERSION_HG38:-${VEP_CACHE_VERSION:-}}" "${VEP_CACHE_MERGED_HG38:-${VEP_CACHE_MERGED:-}}"
 }
 
 parse_vep_outputs() {

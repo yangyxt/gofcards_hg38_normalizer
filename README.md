@@ -38,7 +38,9 @@ export VEP_CACHE_HG19=/path/to/GRCh37/vep/cache
 export VEP_CACHE_VERSION_HG19=112
 # Optional: set these only when a local GRCh38 VEP cache is available.
 export VEP_CACHE_HG38=/path/to/GRCh38/vep/cache
-export VEP_CACHE_VERSION_HG38=112
+export VEP_CACHE_VERSION_HG38=113
+# Set when the cache lives under homo_sapiens_merged/<version>_GRCh38.
+export VEP_CACHE_MERGED_HG38=1
 # Optional but recommended: enables HGNC alias/previous-symbol normalization
 # before GoFCards-to-VEP HGVS concordance ranking.
 export HGNC_COMPLETE_SET_TSV=/path/to/hgnc_complete_set.txt
