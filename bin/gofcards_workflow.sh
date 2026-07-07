@@ -144,16 +144,33 @@ vep_common_args() {
     "${cache_args[@]}"
 }
 
+normalize_vcf_for_vep() {
+  local input_vcf="$1"
+  local output_vcf="$2"
+  local fasta="$3"
+  if command -v bcftools >/dev/null 2>&1; then
+    bcftools norm -f "${fasta}" -c w -m-any "${input_vcf}" -Ov -o "${output_vcf}" 2> "${output_vcf%.vcf}.log"
+    printf '%s\n' "${output_vcf}"
+  else
+    echo "bcftools not on PATH; using unnormalized VCF ${input_vcf}" >&2
+    printf '%s\n' "${input_vcf}"
+  fi
+}
+
 run_vep_hg19() {
   : "${HG19_FASTA:?Set HG19_FASTA before run_vep_hg19}"
   mkdir -p "${VEP_OUTPUT_DIR}"
-  vep_common_args GRCh37 "${VEP_INPUT_DIR}/gofcards.hg19.vcf" "${VEP_OUTPUT_DIR}/gofcards.hg19.vep.tsv" "${HG19_FASTA}" "${VEP_CACHE_HG19:-${VEP_CACHE:-}}" "${VEP_CACHE_VERSION_HG19:-${VEP_CACHE_VERSION:-}}" "${VEP_CACHE_MERGED_HG19:-${VEP_CACHE_MERGED:-}}"
+  local input_vcf
+  input_vcf="$(normalize_vcf_for_vep "${VEP_INPUT_DIR}/gofcards.hg19.vcf" "${VEP_INPUT_DIR}/gofcards.hg19.norm.vcf" "${HG19_FASTA}")"
+  vep_common_args GRCh37 "${input_vcf}" "${VEP_OUTPUT_DIR}/gofcards.hg19.vep.tsv" "${HG19_FASTA}" "${VEP_CACHE_HG19:-${VEP_CACHE:-}}" "${VEP_CACHE_VERSION_HG19:-${VEP_CACHE_VERSION:-}}" "${VEP_CACHE_MERGED_HG19:-${VEP_CACHE_MERGED:-}}"
 }
 
 run_vep_hg38() {
   : "${HG38_FASTA:?Set HG38_FASTA before run_vep_hg38}"
   mkdir -p "${VEP_OUTPUT_DIR}"
-  vep_common_args GRCh38 "${VEP_INPUT_DIR}/gofcards.hg38.vcf" "${VEP_OUTPUT_DIR}/gofcards.hg38.vep.tsv" "${HG38_FASTA}" "${VEP_CACHE_HG38:-${VEP_CACHE:-}}" "${VEP_CACHE_VERSION_HG38:-${VEP_CACHE_VERSION:-}}" "${VEP_CACHE_MERGED_HG38:-${VEP_CACHE_MERGED:-}}"
+  local input_vcf
+  input_vcf="$(normalize_vcf_for_vep "${VEP_INPUT_DIR}/gofcards.hg38.vcf" "${VEP_INPUT_DIR}/gofcards.hg38.norm.vcf" "${HG38_FASTA}")"
+  vep_common_args GRCh38 "${input_vcf}" "${VEP_OUTPUT_DIR}/gofcards.hg38.vep.tsv" "${HG38_FASTA}" "${VEP_CACHE_HG38:-${VEP_CACHE:-}}" "${VEP_CACHE_VERSION_HG38:-${VEP_CACHE_VERSION:-}}" "${VEP_CACHE_MERGED_HG38:-${VEP_CACHE_MERGED:-}}"
 }
 
 parse_vep_outputs() {

@@ -14,7 +14,13 @@ HGVS_MATCH_STATUSES = {
     "protein_only_match",
     "cdna_only_match",
 }
-GENOMIC_ONLY_STATUSES = {"no_parseable_gofcards_hgvs"}
+GENOMIC_ONLY_STATUSES = {
+    "no_parseable_gofcards_hgvs",
+    "same_gene_no_hgvs_match",
+    "no_vep_hgvs",
+    "no_same_gene_vep_row",
+    "other_no_match",
+}
 INVALID_SYMBOLS = {"", "-", ".", "NA", "N/A", "UNKNOWN"}
 
 
@@ -71,6 +77,41 @@ def _read_sheet_or_empty(workbook_xlsx: str | Path, sheet_name: str) -> pd.DataF
         return df.where(pd.notna(df), "")
     except Exception:
         return pd.DataFrame()
+
+
+def _read_normalized_vcf_by_allele(workbook_xlsx: str | Path, assembly: str) -> dict[str, dict[str, str]]:
+    workbook_path = Path(workbook_xlsx)
+    key_path = workbook_path.parent / "vep_inputs" / "gofcards_vep_input_key.xlsx"
+    vcf_path = workbook_path.parent / "vep_inputs" / f"gofcards.{assembly}.norm.vcf"
+    if not key_path.exists() or not vcf_path.exists():
+        return {}
+    key_df = read_excel(key_path, 0).where(lambda df: pd.notna(df), "")
+    required = {"assembly", "vcf_id", "allele_key"}
+    if not required.issubset(set(key_df.columns)):
+        return {}
+    id_to_key = {
+        _clean(row.get("vcf_id")): _clean(row.get("allele_key"))
+        for _, row in key_df[key_df["assembly"].map(_clean).eq(assembly)].iterrows()
+    }
+    out: dict[str, dict[str, str]] = {}
+    with open(vcf_path, encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip() or line.startswith("#"):
+                continue
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) < 5:
+                continue
+            chrom, pos, record_id, ref, alt = fields[:5]
+            allele_key = id_to_key.get(record_id)
+            if not allele_key or allele_key in out:
+                continue
+            out[allele_key] = {
+                "chrom": _clean(chrom),
+                "pos": _clean(pos),
+                "ref": _clean(ref),
+                "alt": _clean(alt),
+            }
+    return out
 
 
 def _core_metadata_by_allele(workbook_xlsx: str | Path) -> dict[str, dict[str, str]]:
@@ -161,9 +202,7 @@ def export_priva_gof_tsv(
     keep_status = HGVS_MATCH_STATUSES | GENOMIC_ONLY_STATUSES
     df = df[df["gofcards_hgvs_match_status"].isin(keep_status)].copy()
     if df.empty:
-        raise ValueError(
-            f"{sheet} has no GoFCards rows with VEP-concordant HGVS or coordinate-only status"
-        )
+        raise ValueError(f"{sheet} has no GoFCards rows usable for exact variant matching")
 
     gofcards_symbol = df["gofcards_symbol_resolved"].where(
         _valid_symbol_mask(df["gofcards_symbol_resolved"]),
@@ -174,7 +213,7 @@ def export_priva_gof_tsv(
         df["vep_symbol"],
     )
     match_symbol = vep_symbol.where(_valid_symbol_mask(vep_symbol), gofcards_symbol)
-    is_genomic_only = df["gofcards_hgvs_match_status"].isin(GENOMIC_ONLY_STATUSES)
+    is_genomic_only = ~df["gofcards_hgvs_match_status"].isin(HGVS_MATCH_STATUSES)
     hgvsc = df["HGVSc"].where(~is_genomic_only, "")
     hgvsp = df["HGVSp"].where(~is_genomic_only, "")
     hgvsp_key = hgvsp.map(_hgvsp_key)
@@ -210,6 +249,10 @@ def export_priva_gof_tsv(
     ]
 
     metadata = _core_metadata_by_allele(workbook_xlsx)
+    normalized_vcf = {
+        "hg19": _read_normalized_vcf_by_allele(workbook_xlsx, "hg19"),
+        "hg38": _read_normalized_vcf_by_allele(workbook_xlsx, "hg38"),
+    }
 
     def meta_value(allele_key: object, field: str) -> str:
         return metadata.get(_clean(allele_key), {}).get(field, "")
@@ -256,12 +299,32 @@ def export_priva_gof_tsv(
         _genomic_key(chrom, pos, ref, alt)
         for chrom, pos, ref, alt in zip(out["hg19_chrom"], out["hg19_pos"], out["hg19_ref"], out["hg19_alt"])
     ]
-    out["hg19_vcf_key"] = out["hg19_genomic_key"]
+    for assembly in ("hg19", "hg38"):
+        norm_rows = normalized_vcf[assembly]
+        out[f"{assembly}_vcf_pos"] = [
+            norm_rows.get(allele_key, {}).get("pos", raw_pos)
+            for allele_key, raw_pos in zip(out["allele_key"], out[f"{assembly}_pos"])
+        ]
+        out[f"{assembly}_vcf_ref"] = [
+            norm_rows.get(allele_key, {}).get("ref", raw_ref)
+            for allele_key, raw_ref in zip(out["allele_key"], out[f"{assembly}_ref"])
+        ]
+        out[f"{assembly}_vcf_alt"] = [
+            norm_rows.get(allele_key, {}).get("alt", raw_alt)
+            for allele_key, raw_alt in zip(out["allele_key"], out[f"{assembly}_alt"])
+        ]
+    out["hg19_vcf_key"] = [
+        _genomic_key(chrom, pos, ref, alt)
+        for chrom, pos, ref, alt in zip(out["hg19_chrom"], out["hg19_vcf_pos"], out["hg19_vcf_ref"], out["hg19_vcf_alt"])
+    ]
     out["hg38_genomic_key"] = [
         _genomic_key(chrom, pos, ref, alt)
         for chrom, pos, ref, alt in zip(out["hg38_chrom"], out["hg38_pos"], out["hg38_ref"], out["hg38_alt"])
     ]
-    out["hg38_vcf_key"] = out["hg38_genomic_key"]
+    out["hg38_vcf_key"] = [
+        _genomic_key(chrom, pos, ref, alt)
+        for chrom, pos, ref, alt in zip(out["hg38_chrom"], out["hg38_vcf_pos"], out["hg38_vcf_ref"], out["hg38_vcf_alt"])
+    ]
     key_types: list[str] = []
     for _, row in out.iterrows():
         keys = []

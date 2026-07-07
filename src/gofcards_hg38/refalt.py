@@ -140,7 +140,6 @@ def _check_row(row: pd.Series, fasta: Fasta) -> dict[str, Any]:
     end = _to_int(row.get("summary_hg38_end"))
     ref = str(row.get("Ref", "") or "").upper()
     alt = str(row.get("Alt", "") or "").upper()
-    variant_type = str(row.get("variant_type", "") or "")
 
     result: dict[str, Any] = {
         "hg38_Chr": chrom,
@@ -176,11 +175,8 @@ def _check_row(row: pd.Series, fasta: Fasta) -> dict[str, Any]:
         return result
 
     result["hg38_REF_fasta"] = fasta_ref
-    is_snv = variant_type.upper() == "SNV" or (len(ref) == 1 and len(alt) == 1)
+    is_snv = len(ref) == 1 and len(alt) == 1
     if is_snv:
-        if len(ref) != 1 or len(alt) != 1:
-            result["hg38_refalt_status"] = "variant_type_snv_but_allele_length_not_1"
-            return result
         result["hg38_VCF_Pos"] = start
         result["hg38_Ref_for_vep"] = fasta_ref[:1]
         if fasta_ref[:1] == ref:
@@ -195,10 +191,10 @@ def _check_row(row: pd.Series, fasta: Fasta) -> dict[str, Any]:
         result["hg38_VCF_Pos"] = start
         result["hg38_Ref_for_vep"] = ref
         result["hg38_Alt_for_vep"] = alt
-        result["hg38_refalt_status"] = "indel_ref_match_not_left_normalized"
+        result["hg38_refalt_status"] = "complex_ref_match_not_left_normalized"
         result["hg38_refalt_needs_review"] = "N"
     else:
-        result["hg38_refalt_status"] = "indel_ref_mismatch_needs_normalization"
+        result["hg38_refalt_status"] = "complex_ref_mismatch_needs_normalization"
     return result
 
 

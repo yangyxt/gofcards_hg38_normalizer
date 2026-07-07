@@ -11,9 +11,9 @@ keeps one preferred transcript row per allele and assembly, ranked by MANE
 Select, MANE Plus Clinical, canonical transcript, then any transcript with HGVS.
 The workflow also exports `gofcards_priva_exact_gof_hgvsp.tsv.gz`, a compact
 runtime cache for PriVA exact variant-level GoF matching. The cache is
-VEP-centric: it retains only the preferred VEP transcript consequence that
-matches the raw GoFCards HGVS, plus coordinate-only GoFCards records that lack
-parseable HGVS but have complete hg19 and hg38 padded allele keys.
+VEP-calibrated but coordinate-complete: exact HGVSp matching is limited to VEP
+rows concordant with the raw GoFCards HGVS, while exact genomic matching keeps
+all GoFCards alleles that have complete hg19 and hg38 REF/ALT keys.
 
 The workflow:
 
@@ -23,7 +23,8 @@ The workflow:
 4. Validates or refills hg38 REF/ALT from a user-supplied hg38 FASTA.
 5. VCF-pads deletion/insertion records with blank source REF or ALT using the
    supplied FASTA files, while preserving original GoFCards coordinates.
-6. Builds VEP input for hg19 and hg38 and parses VEP MANE/HGVS output.
+6. Builds VEP input for hg19 and hg38, normalizes VCF alleles with
+   `bcftools norm`, and parses VEP MANE/HGVS output.
 7. Runs TransVar as an optional cross-check, not as the final transcript authority.
 
 ## Quick Start
@@ -105,9 +106,9 @@ Default output paths under `work/`:
 - `gofcards_priva_exact_gof_hgvsp.tsv.gz`: compact PriVA cache keyed by
   normalized `HGNC_Symbol` plus exact VEP `HGVSp` when available, and retaining
   nonblank `hg19_genomic_key`, `hg19_vcf_key`, `hg38_genomic_key`, and
-  `hg38_vcf_key` for exact position/ref/alt matching. The allele columns use
-  the FASTA-padded representation for GoFCards deletion/insertion records with
-  blank source REF or ALT.
+  `hg38_vcf_key` for exact position/ref/alt matching. The `*_genomic_key`
+  columns preserve raw GoFCards/source assembly alleles, while `*_vcf_key`
+  columns use the bcftools-normalized VCF representation.
   This file is for variant-level GoF matching only; it must not be used as
   gene-level GoF evidence.
 
@@ -134,9 +135,10 @@ rebuilt with current VEP/MANE. TransVar is useful for reconciliation and
 additional HGVS checks; it is deliberately not used as the final authority.
 PriVA should consume the compact TSV cache for exact HGVSp or exact genomic
 allele matching; a match means the candidate variant is represented in
-GoFCards, not that every variant in the same gene is GoF. Rows without VEP
-HGVSp are retained only when GoFCards lacks parseable HGVS and both hg19 and
-hg38 padded allele keys are complete.
+GoFCards, not that every variant in the same gene is GoF. Rows whose VEP HGVS
+does not converge with the raw GoFCards HGVS are retained for genomic matching
+only: their cache HGVSc/HGVSp fields are blank, but raw and normalized genomic
+keys are still available.
 Set `HGNC_COMPLETE_SET_TSV` to the official HGNC complete-set TSV when building
 the workbook so previous symbols and aliases such as `TMEM173/STING1` and
 `PARK2/PRKN` are reconciled before transcript ranking.

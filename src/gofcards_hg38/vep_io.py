@@ -36,8 +36,11 @@ def _clean(value: object) -> str:
 
 def _write_vcf(rows: list[dict], path: str | Path) -> None:
     out = ensure_parent(path)
+    contigs = sorted({str(row["chrom"]) for row in rows if _clean(row.get("chrom"))})
     with out.open("w", encoding="utf-8") as handle:
         handle.write("##fileformat=VCFv4.2\n")
+        for contig in contigs:
+            handle.write(f"##contig=<ID={contig}>\n")
         handle.write("##INFO=<ID=ALLELE_KEY,Number=1,Type=String,Description=\"GoFCards allele key\">\n")
         handle.write("##INFO=<ID=GENE,Number=1,Type=String,Description=\"GoFCards gene symbol\">\n")
         handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
@@ -90,9 +93,9 @@ def write_vep_inputs(input_xlsx: str | Path, out_dir: str | Path) -> None:
             )
             key_rows.append({"assembly": "hg19", "vcf_id": hg19_id, "allele_key": key})
 
-        ref38 = str(row.get("hg38_Ref_for_vep", "") or "")
-        alt38 = str(row.get("hg38_Alt_for_vep", "") or "")
-        start38 = str(row.get("hg38_VCF_Pos", "") or row.get("hg38_Start", "") or "")
+        ref38 = _clean(row.get("hg38_Ref_for_vep"))
+        alt38 = _clean(row.get("hg38_Alt_for_vep"))
+        start38 = _clean(row.get("hg38_VCF_Pos")) or _clean(row.get("hg38_Start"))
         if ref38 and alt38 and start38:
             hg38_id = _vcf_id("gofcards_hg38", key, idx + 1)
             hg38_rows.append(
