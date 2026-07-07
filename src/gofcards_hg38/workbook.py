@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pandas as pd
 
+from .hgnc import resolve_symbol
 from .io_utils import read_excel, write_excel
 from .schema import allele_key_series
 from .transvar_io import read_transvar_outputs
@@ -52,14 +54,24 @@ CORE_COLUMNS = [
 
 TRANSCRIPT_TABLE_COLUMNS = [
     "gofcards_symbol",
+    "gofcards_symbol_resolved",
     "source_refseq_transcript",
     "assembly",
     "vep_symbol",
+    "vep_symbol_resolved",
     "vep_transcript",
     "feature_type",
     "consequence",
     "HGVSc",
     "HGVSp",
+    "gofcards_hgvsc_key",
+    "gofcards_hgvsp_key",
+    "vep_hgvsc_key",
+    "vep_hgvsp_key",
+    "gofcards_gene_match",
+    "gofcards_hgvsc_match",
+    "gofcards_hgvsp_match",
+    "gofcards_hgvs_match_status",
     "MANE_SELECT",
     "MANE_PLUS_CLINICAL",
     "CANONICAL",
@@ -82,6 +94,168 @@ TRANSCRIPT_TABLE_COLUMNS = [
     "allele_key",
     "Uploaded_variation",
 ]
+
+AA3_TO_1 = {
+    "Ala": "A",
+    "Arg": "R",
+    "Asn": "N",
+    "Asp": "D",
+    "Cys": "C",
+    "Gln": "Q",
+    "Glu": "E",
+    "Gly": "G",
+    "His": "H",
+    "Ile": "I",
+    "Leu": "L",
+    "Lys": "K",
+    "Met": "M",
+    "Phe": "F",
+    "Pro": "P",
+    "Ser": "S",
+    "Thr": "T",
+    "Trp": "W",
+    "Tyr": "Y",
+    "Val": "V",
+    "Ter": "*",
+    "Sec": "U",
+    "Pyl": "O",
+    "Xaa": "X",
+}
+AA3_PATTERN = re.compile("|".join(map(re.escape, sorted(AA3_TO_1, key=len, reverse=True))))
+
+
+def _clean(value: object) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() == "nan" else text
+
+
+def _normalize_hgvsc(value: object) -> str:
+    text = _clean(value)
+    if not text or text in {"-", "."}:
+        return ""
+    text = text.split(":")[-1]
+    match = re.fullmatch(r"c\.([ACGTN])(\d+)([ACGTN])", text, flags=re.IGNORECASE)
+    if match:
+        ref, pos, alt = match.groups()
+        text = f"c.{pos}{ref.upper()}>{alt.upper()}"
+    return text.upper().replace(" ", "")
+
+
+def _normalize_hgvsp(value: object) -> str:
+    text = _clean(value).replace("%3D", "=")
+    if not text or text in {"-", "."}:
+        return ""
+    text = text.split(":")[-1]
+    text = re.sub(r"^p\.", "", text)
+    text = AA3_PATTERN.sub(lambda match: AA3_TO_1[match.group(0)], text)
+    return text.replace("Ter", "*").replace("Stop", "*").upper().replace(" ", "")
+
+
+def _parse_aachange(value: object) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    for item in _clean(value).split(","):
+        parts = [part.strip() for part in item.split(":") if part.strip()]
+        if len(parts) < 2:
+            continue
+        gene = parts[0]
+        cdna = next((part for part in parts if part.startswith("c.")), "")
+        protein = next((part for part in parts if part.startswith("p.")), "")
+        entries.append(
+            {
+                "gene": resolve_symbol(gene),
+                "hgvsc": _normalize_hgvsc(cdna),
+                "hgvsp": _normalize_hgvsp(protein),
+            }
+        )
+    return entries
+
+
+def _join_keys(values: list[str]) -> str:
+    return ";".join(sorted({value for value in values if value}))
+
+
+def _annotate_hgvs_matches(table: pd.DataFrame) -> pd.DataFrame:
+    if table.empty:
+        for col in TRANSCRIPT_TABLE_COLUMNS:
+            if col not in table.columns:
+                table[col] = ""
+        return table[TRANSCRIPT_TABLE_COLUMNS]
+
+    out = table.copy()
+    annotations: list[dict[str, str]] = []
+    for _, row in out.iterrows():
+        gofcards_symbol_resolved = resolve_symbol(row.get("gofcards_symbol"))
+        vep_symbol_resolved = resolve_symbol(row.get("vep_symbol"))
+        source_entries = _parse_aachange(row.get("gofcards_AAChange_refGene"))
+        vep_hgvsc_key = _normalize_hgvsc(row.get("HGVSc"))
+        vep_hgvsp_key = _normalize_hgvsp(row.get("HGVSp"))
+        source_hgvsc_keys = [entry["hgvsc"] for entry in source_entries]
+        source_hgvsp_keys = [entry["hgvsp"] for entry in source_entries]
+
+        gene_match = any(entry["gene"] and entry["gene"] == vep_symbol_resolved for entry in source_entries)
+        hgvsc_match = any(
+            gene_match
+            and entry["gene"] == vep_symbol_resolved
+            and entry["hgvsc"]
+            and entry["hgvsc"] == vep_hgvsc_key
+            for entry in source_entries
+        )
+        hgvsp_match = any(
+            gene_match
+            and entry["gene"] == vep_symbol_resolved
+            and entry["hgvsp"]
+            and entry["hgvsp"] == vep_hgvsp_key
+            for entry in source_entries
+        )
+        both_match = any(
+            entry["gene"] == vep_symbol_resolved
+            and entry["hgvsc"]
+            and entry["hgvsp"]
+            and entry["hgvsc"] == vep_hgvsc_key
+            and entry["hgvsp"] == vep_hgvsp_key
+            for entry in source_entries
+        )
+        has_source_hgvs = any(entry["hgvsc"] or entry["hgvsp"] for entry in source_entries)
+        has_vep_hgvs = bool(vep_hgvsc_key or vep_hgvsp_key)
+
+        if both_match:
+            status = "both_cdna_protein_match"
+        elif hgvsp_match:
+            status = "protein_only_match"
+        elif hgvsc_match:
+            status = "cdna_only_match"
+        elif gene_match and has_source_hgvs and has_vep_hgvs:
+            status = "same_gene_no_hgvs_match"
+        elif not has_source_hgvs:
+            status = "no_parseable_gofcards_hgvs"
+        elif not has_vep_hgvs:
+            status = "no_vep_hgvs"
+        elif not gene_match:
+            status = "no_same_gene_vep_row"
+        else:
+            status = "other_no_match"
+
+        annotations.append(
+            {
+                "gofcards_symbol_resolved": gofcards_symbol_resolved,
+                "vep_symbol_resolved": vep_symbol_resolved,
+                "gofcards_hgvsc_key": _join_keys(source_hgvsc_keys),
+                "gofcards_hgvsp_key": _join_keys(source_hgvsp_keys),
+                "vep_hgvsc_key": vep_hgvsc_key,
+                "vep_hgvsp_key": vep_hgvsp_key,
+                "gofcards_gene_match": "Y" if gene_match else "N",
+                "gofcards_hgvsc_match": "Y" if hgvsc_match else "N",
+                "gofcards_hgvsp_match": "Y" if hgvsp_match else "N",
+                "gofcards_hgvs_match_status": status,
+            }
+        )
+
+    annotation_df = pd.DataFrame(annotations, index=out.index)
+    for col in annotation_df.columns:
+        out[col] = annotation_df[col]
+    return out[TRANSCRIPT_TABLE_COLUMNS]
 
 
 def _prepare_core(refalt: pd.DataFrame) -> pd.DataFrame:
@@ -108,14 +282,24 @@ def _core_only_transcript_table(core: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(
         {
             "gofcards_symbol": core["Gene_Symbol"],
+            "gofcards_symbol_resolved": "",
             "source_refseq_transcript": core["Transcript"],
             "assembly": "",
             "vep_symbol": "",
+            "vep_symbol_resolved": "",
             "vep_transcript": "",
             "feature_type": "",
             "consequence": "",
             "HGVSc": "",
             "HGVSp": "",
+            "gofcards_hgvsc_key": "",
+            "gofcards_hgvsp_key": "",
+            "vep_hgvsc_key": "",
+            "vep_hgvsp_key": "",
+            "gofcards_gene_match": "",
+            "gofcards_hgvsc_match": "",
+            "gofcards_hgvsp_match": "",
+            "gofcards_hgvs_match_status": "",
             "MANE_SELECT": "",
             "MANE_PLUS_CLINICAL": "",
             "CANONICAL": "",
@@ -139,7 +323,7 @@ def _core_only_transcript_table(core: pd.DataFrame) -> pd.DataFrame:
             "Uploaded_variation": "",
         }
     )
-    return out[TRANSCRIPT_TABLE_COLUMNS]
+    return _annotate_hgvs_matches(out)
 
 
 def _build_transcript_table(core: pd.DataFrame, vep_all: pd.DataFrame) -> pd.DataFrame:
@@ -171,14 +355,24 @@ def _build_transcript_table(core: pd.DataFrame, vep_all: pd.DataFrame) -> pd.Dat
     out = pd.DataFrame(
         {
             "gofcards_symbol": merged["Gene_Symbol"],
+            "gofcards_symbol_resolved": "",
             "source_refseq_transcript": merged["Transcript"],
             "assembly": merged["assembly"],
             "vep_symbol": merged["SYMBOL"],
+            "vep_symbol_resolved": "",
             "vep_transcript": merged["Feature"],
             "feature_type": merged["Feature_type"],
             "consequence": merged["Consequence"],
             "HGVSc": merged["HGVSc"],
             "HGVSp": merged["HGVSp"],
+            "gofcards_hgvsc_key": "",
+            "gofcards_hgvsp_key": "",
+            "vep_hgvsc_key": "",
+            "vep_hgvsp_key": "",
+            "gofcards_gene_match": "",
+            "gofcards_hgvsc_match": "",
+            "gofcards_hgvsp_match": "",
+            "gofcards_hgvs_match_status": "",
             "MANE_SELECT": merged["MANE_SELECT"],
             "MANE_PLUS_CLINICAL": merged["MANE_PLUS_CLINICAL"],
             "CANONICAL": merged["CANONICAL"],
@@ -211,19 +405,31 @@ def _build_transcript_table(core: pd.DataFrame, vep_all: pd.DataFrame) -> pd.Dat
     missing_core = core.loc[~core["allele_key"].astype(str).isin(vep_keys)].copy()
     if not missing_core.empty:
         out = pd.concat([out, _core_only_transcript_table(missing_core)], ignore_index=True)
-    return out
+    return _annotate_hgvs_matches(out)
 
 
-def _preferred_rank(row: pd.Series) -> tuple[int, str]:
+def _preferred_rank(row: pd.Series) -> tuple[int, int, str]:
+    match_rank = {
+        "both_cdna_protein_match": 0,
+        "protein_only_match": 1,
+        "cdna_only_match": 2,
+        "same_gene_no_hgvs_match": 3,
+        "no_parseable_gofcards_hgvs": 4,
+        "no_vep_hgvs": 5,
+        "no_same_gene_vep_row": 6,
+        "other_no_match": 7,
+    }.get(str(row.get("gofcards_hgvs_match_status", "")), 8)
     if str(row.get("MANE_SELECT", "") or "").strip():
-        return (0, str(row.get("vep_transcript", "")))
-    if str(row.get("MANE_PLUS_CLINICAL", "") or "").strip():
-        return (1, str(row.get("vep_transcript", "")))
-    if str(row.get("CANONICAL", "") or "").upper() == "YES":
-        return (2, str(row.get("vep_transcript", "")))
-    if str(row.get("HGVSc", "") or "").strip() or str(row.get("HGVSp", "") or "").strip():
-        return (3, str(row.get("vep_transcript", "")))
-    return (4, str(row.get("vep_transcript", "")))
+        mane_rank = 0
+    elif str(row.get("MANE_PLUS_CLINICAL", "") or "").strip():
+        mane_rank = 1
+    elif str(row.get("CANONICAL", "") or "").upper() == "YES":
+        mane_rank = 2
+    elif str(row.get("HGVSc", "") or "").strip() or str(row.get("HGVSp", "") or "").strip():
+        mane_rank = 3
+    else:
+        mane_rank = 4
+    return (match_rank, mane_rank, str(row.get("vep_transcript", "")))
 
 
 def _build_preferred_table(transcript_table: pd.DataFrame) -> pd.DataFrame:
@@ -232,10 +438,13 @@ def _build_preferred_table(transcript_table: pd.DataFrame) -> pd.DataFrame:
     ranked = transcript_table.copy()
     ranks = ranked.apply(_preferred_rank, axis=1)
     ranked["_preferred_rank"] = [r[0] for r in ranks]
-    ranked["_preferred_transcript_sort"] = [r[1] for r in ranks]
-    ranked = ranked.sort_values(["allele_key", "assembly", "_preferred_rank", "_preferred_transcript_sort"])
+    ranked["_preferred_mane_rank"] = [r[1] for r in ranks]
+    ranked["_preferred_transcript_sort"] = [r[2] for r in ranks]
+    ranked = ranked.sort_values(
+        ["allele_key", "assembly", "_preferred_rank", "_preferred_mane_rank", "_preferred_transcript_sort"]
+    )
     preferred = ranked.drop_duplicates(["allele_key", "assembly"], keep="first")
-    return preferred.drop(columns=["_preferred_rank", "_preferred_transcript_sort"])
+    return preferred.drop(columns=["_preferred_rank", "_preferred_mane_rank", "_preferred_transcript_sort"])
 
 
 def build_workbook(

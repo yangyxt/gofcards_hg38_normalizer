@@ -48,6 +48,7 @@ Required env vars for selected steps:
   VEP_CACHE               Optional shared VEP cache directory.
   VEP_CACHE_HG19          Optional GRCh37/hg19 VEP cache directory.
   VEP_CACHE_HG38          Optional GRCh38 VEP cache directory. If unset, run_all skips hg38 VEP.
+  HGNC_COMPLETE_SET_TSV   Optional HGNC complete-set TSV for symbol alias normalization.
   PRIVA_GOF_TSV           Optional compact PriVA exact GoF TSV output path.
 USAGE
 }

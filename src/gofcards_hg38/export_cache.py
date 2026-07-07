@@ -85,11 +85,21 @@ def export_priva_gof_tsv(
 
     for col in [
         "gofcards_symbol",
+        "gofcards_symbol_resolved",
         "vep_symbol",
+        "vep_symbol_resolved",
         "source_refseq_transcript",
         "vep_transcript",
         "HGVSc",
         "HGVSp",
+        "gofcards_hgvsc_key",
+        "gofcards_hgvsp_key",
+        "vep_hgvsc_key",
+        "vep_hgvsp_key",
+        "gofcards_gene_match",
+        "gofcards_hgvsc_match",
+        "gofcards_hgvsp_match",
+        "gofcards_hgvs_match_status",
         "CANONICAL",
         "hg19_chrom",
         "hg19_start",
@@ -109,9 +119,17 @@ def export_priva_gof_tsv(
         if col not in df.columns:
             df[col] = ""
 
-    match_symbol = df["vep_symbol"].where(
-        df["vep_symbol"].fillna("").astype(str).str.strip() != "",
+    gofcards_symbol = df["gofcards_symbol_resolved"].where(
+        df["gofcards_symbol_resolved"].fillna("").astype(str).str.strip() != "",
         df["gofcards_symbol"],
+    )
+    vep_symbol = df["vep_symbol_resolved"].where(
+        df["vep_symbol_resolved"].fillna("").astype(str).str.strip() != "",
+        df["vep_symbol"],
+    )
+    match_symbol = vep_symbol.where(
+        vep_symbol.fillna("").astype(str).str.strip() != "",
+        gofcards_symbol,
     )
     normalized_hgvsp = df["HGVSp"].map(_normalize_hgvsp)
     metadata = _core_metadata_by_allele(workbook_xlsx)
@@ -127,13 +145,23 @@ def export_priva_gof_tsv(
             "symbol": match_symbol.map(_normalize_symbol),
             "hgvsp_key": df["HGVSp"].map(_hgvsp_key),
             "gofcards_symbol": df["gofcards_symbol"].map(_clean),
+            "gofcards_symbol_resolved": gofcards_symbol.map(_clean),
             "vep_symbol": df["vep_symbol"].map(_clean),
+            "vep_symbol_resolved": vep_symbol.map(_clean),
             "match_symbol": match_symbol.map(_normalize_symbol),
             "source_refseq_transcript": df["source_refseq_transcript"].map(_clean),
             "vep_transcript": df["vep_transcript"].map(_clean),
             "HGVSc": df["HGVSc"].map(_clean),
             "HGVSp": df["HGVSp"].map(_clean),
             "normalized_hgvsp": normalized_hgvsp,
+            "gofcards_hgvsc_key": df["gofcards_hgvsc_key"].map(_clean),
+            "gofcards_hgvsp_key": df["gofcards_hgvsp_key"].map(_clean),
+            "vep_hgvsc_key": df["vep_hgvsc_key"].map(_clean),
+            "vep_hgvsp_key": df["vep_hgvsp_key"].map(_clean),
+            "gofcards_gene_match": df["gofcards_gene_match"].map(_clean),
+            "gofcards_hgvsc_match": df["gofcards_hgvsc_match"].map(_clean),
+            "gofcards_hgvsp_match": df["gofcards_hgvsp_match"].map(_clean),
+            "gofcards_hgvs_match_status": df["gofcards_hgvs_match_status"].map(_clean),
             "canonical_transcript": df["CANONICAL"].map(_clean),
             "hg19_chrom": df["hg19_chrom"].map(_clean),
             "hg19_start": df["hg19_start"].map(_clean),

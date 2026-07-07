@@ -36,6 +36,9 @@ export VEP_CACHE_VERSION_HG19=112
 # Optional: set these only when a local GRCh38 VEP cache is available.
 export VEP_CACHE_HG38=/path/to/GRCh38/vep/cache
 export VEP_CACHE_VERSION_HG38=112
+# Optional but recommended: enables HGNC alias/previous-symbol normalization
+# before GoFCards-to-VEP HGVS concordance ranking.
+export HGNC_COMPLETE_SET_TSV=/path/to/hgnc_complete_set.txt
 
 bin/gofcards_workflow.sh run_all
 ```
@@ -89,6 +92,9 @@ Default output paths under `work/`:
 - `gofcards_hg38_normalized_workbook.xlsx`: integrated final workbook.
   - `variant_transcript_table`: full transcript-level target table.
   - `preferred_transcript_table`: one preferred transcript row per allele and assembly.
+    Representative transcript selection first prioritizes concordance between
+    GoFCards RefSeq-style cDNA/protein HGVS and VEP ENST/ENSP HGVS after HGNC
+    symbol normalization, then falls back to MANE/canonical status.
 - `gofcards_priva_exact_gof_hgvsp.tsv.gz`: compact PriVA cache keyed by
   normalized HGNC symbol plus exact protein change. This file is for exact
   variant-level GoF matching only; it must not be used as gene-level GoF
@@ -118,6 +124,9 @@ additional HGVS checks; it is deliberately not used as the final authority.
 PriVA should consume the compact TSV cache for exact HGVSp matching; a match
 means the candidate protein change is represented in GoFCards, not that every
 variant in the same gene is GoF.
+Set `HGNC_COMPLETE_SET_TSV` to the official HGNC complete-set TSV when building
+the workbook so previous symbols and aliases such as `TMEM173/STING1` and
+`PARK2/PRKN` are reconciled before transcript ranking.
 
 The backend API currently requires browser-like request headers. The client
 sets those headers and retries transient failures. If the API blocks a host, the
