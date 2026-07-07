@@ -17,6 +17,7 @@ VEP_INPUT_DIR="${VEP_INPUT_DIR:-${WORKDIR}/vep_inputs}"
 VEP_OUTPUT_DIR="${VEP_OUTPUT_DIR:-${WORKDIR}/vep_outputs}"
 TRANSVAR_DIR="${TRANSVAR_DIR:-${WORKDIR}/transvar}"
 FINAL_XLSX="${FINAL_XLSX:-${WORKDIR}/gofcards_hg38_normalized_workbook.xlsx}"
+PRIVA_GOF_TSV="${PRIVA_GOF_TSV:-${WORKDIR}/gofcards_priva_exact_gof_hgvsp.tsv.gz}"
 
 mkdir -p "${WORKDIR}"
 
@@ -37,13 +38,17 @@ Functions:
   parse_vep_outputs       Parse VEP tab outputs into one workbook.
   run_transvar_crosscheck Generate and optionally run TransVar checks.
   build_workbook          Merge core, VEP, and TransVar outputs.
+  export_priva_gof_tsv    Export compact TSV for PriVA exact GoF variant matching.
   run_all                 Run all non-optional steps, plus VEP/TransVar when configured.
 
 Required env vars for selected steps:
   HG38_FASTA              Required by validate_hg38_refalt and hg38 VEP.
   HG19_FASTA              Required by hg19 VEP.
   VEP                     Optional; defaults to "vep" if available.
-  VEP_CACHE               Optional VEP cache directory.
+  VEP_CACHE               Optional shared VEP cache directory.
+  VEP_CACHE_HG19          Optional GRCh37/hg19 VEP cache directory.
+  VEP_CACHE_HG38          Optional GRCh38 VEP cache directory. If unset, run_all skips hg38 VEP.
+  PRIVA_GOF_TSV           Optional compact PriVA exact GoF TSV output path.
 USAGE
 }
 
@@ -170,6 +175,12 @@ build_workbook() {
     --out-xlsx "${FINAL_XLSX}"
 }
 
+export_priva_gof_tsv() {
+  run_py export-priva-gof-tsv \
+    --workbook-xlsx "${FINAL_XLSX}" \
+    --out-tsv "${PRIVA_GOF_TSV}"
+}
+
 run_all() {
   pull_backend_tables
   download_public_excel
@@ -177,15 +188,27 @@ run_all() {
   augment_hg38
   validate_hg38_refalt
   write_vep_inputs
-  if command -v "${VEP:-vep}" >/dev/null 2>&1 && [[ -n "${HG19_FASTA:-}" && -n "${HG38_FASTA:-}" ]]; then
+  local ran_any_vep=0
+  if command -v "${VEP:-vep}" >/dev/null 2>&1 && [[ -n "${HG19_FASTA:-}" ]]; then
     run_vep_hg19
+    ran_any_vep=1
+  else
+    echo "Skipping hg19 VEP: set VEP/HG19_FASTA and ensure VEP is on PATH." >&2
+  fi
+  if command -v "${VEP:-vep}" >/dev/null 2>&1 && [[ -n "${HG38_FASTA:-}" && -n "${VEP_CACHE_HG38:-${VEP_CACHE:-}}" ]]; then
     run_vep_hg38
+    ran_any_vep=1
+  else
+    echo "Skipping hg38 VEP: set VEP/HG38_FASTA and a local VEP_CACHE_HG38. hg38 genomic REF/ALT validation still runs." >&2
+  fi
+  if [[ "${ran_any_vep}" -eq 1 ]]; then
     parse_vep_outputs
   else
-    echo "Skipping VEP: set VEP/HG19_FASTA/HG38_FASTA and ensure VEP is on PATH." >&2
+    echo "Skipping VEP parsing: no VEP run completed." >&2
   fi
   run_transvar_crosscheck
   build_workbook
+  export_priva_gof_tsv
 }
 
 main() {
@@ -196,7 +219,7 @@ main() {
   fi
   shift || true
   case "${cmd}" in
-    create_env|pull_backend_tables|download_public_excel|join_public_excel|augment_hg38|validate_hg38_refalt|write_vep_inputs|run_vep_hg19|run_vep_hg38|parse_vep_outputs|run_transvar_crosscheck|build_workbook|run_all)
+    create_env|pull_backend_tables|download_public_excel|join_public_excel|augment_hg38|validate_hg38_refalt|write_vep_inputs|run_vep_hg19|run_vep_hg38|parse_vep_outputs|run_transvar_crosscheck|build_workbook|export_priva_gof_tsv|run_all)
       "${cmd}" "$@"
       ;;
     *)

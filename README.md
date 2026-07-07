@@ -9,6 +9,8 @@ with clear symbol, transcript ID, HGVSc, HGVSp, hg19 genomic position/ref/alt,
 and hg38 genomic position/ref/alt. The companion `preferred_transcript_table`
 keeps one preferred transcript row per allele and assembly, ranked by MANE
 Select, MANE Plus Clinical, canonical transcript, then any transcript with HGVS.
+The workflow also exports `gofcards_priva_exact_gof_hgvsp.tsv.gz`, a compact
+runtime cache for PriVA exact variant-level GoF matching.
 
 The workflow:
 
@@ -29,13 +31,20 @@ source ~/.bashrc && mamba activate gofcards_hg38
 export HG38_FASTA=/path/to/GRCh38.fa
 export HG19_FASTA=/path/to/hg19.fa
 export VEP=/path/to/vep
-export VEP_CACHE=/path/to/vep/cache
+export VEP_CACHE_HG19=/path/to/GRCh37/vep/cache
+export VEP_CACHE_VERSION_HG19=112
+# Optional: set these only when a local GRCh38 VEP cache is available.
+export VEP_CACHE_HG38=/path/to/GRCh38/vep/cache
+export VEP_CACHE_VERSION_HG38=112
 
 bin/gofcards_workflow.sh run_all
 ```
 
 Outputs are written to `work/` by default. Set `WORKDIR=/path/to/output` to
-use another directory.
+use another directory. `run_all` refreshes the integrated workbook and the
+compact PriVA TSV cache. If `VEP_CACHE_HG38` is not set, `run_all` skips GRCh38
+VEP transcript annotation, while still validating hg38 genomic coordinates and
+REF/ALT from the GoFCards summary endpoint plus the supplied hg38 FASTA.
 
 ## Modular Commands
 
@@ -53,6 +62,7 @@ bin/gofcards_workflow.sh run_vep_hg38
 bin/gofcards_workflow.sh parse_vep_outputs
 bin/gofcards_workflow.sh run_transvar_crosscheck
 bin/gofcards_workflow.sh build_workbook
+bin/gofcards_workflow.sh export_priva_gof_tsv
 ```
 
 The Python CLI is installed into the mamba environment by `create_env`:
@@ -79,6 +89,10 @@ Default output paths under `work/`:
 - `gofcards_hg38_normalized_workbook.xlsx`: integrated final workbook.
   - `variant_transcript_table`: full transcript-level target table.
   - `preferred_transcript_table`: one preferred transcript row per allele and assembly.
+- `gofcards_priva_exact_gof_hgvsp.tsv.gz`: compact PriVA cache keyed by
+  normalized HGNC symbol plus exact protein change. This file is for exact
+  variant-level GoF matching only; it must not be used as gene-level GoF
+  evidence.
 
 ## Smoke Test Status
 
@@ -101,6 +115,9 @@ successfully. Full hg38 REF/ALT validation still requires an explicit
 GoFCards is treated as a curated GoF/DN variant source, but transcript truth is
 rebuilt with current VEP/MANE. TransVar is useful for reconciliation and
 additional HGVS checks; it is deliberately not used as the final authority.
+PriVA should consume the compact TSV cache for exact HGVSp matching; a match
+means the candidate protein change is represented in GoFCards, not that every
+variant in the same gene is GoF.
 
 The backend API currently requires browser-like request headers. The client
 sets those headers and retries transient failures. If the API blocks a host, the

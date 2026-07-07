@@ -4,6 +4,7 @@ import argparse
 
 from .audit_public import audit_public_excel
 from .augment_hg38 import augment_hg38
+from .export_cache import export_priva_gof_tsv
 from .pull_backend import download_public_excel, pull_backend
 from .refalt import validate_refalt
 from .transvar_io import write_transvar_queries
@@ -94,6 +95,18 @@ def build_parser() -> argparse.ArgumentParser:
             args.vep_xlsx,
             args.transvar_dir,
             args.out_xlsx,
+        )
+    )
+
+    export = sub.add_parser("export-priva-gof-tsv", help="Export compact TSV cache for PriVA exact GoF variant matching.")
+    export.add_argument("--workbook-xlsx", required=True)
+    export.add_argument("--out-tsv", required=True)
+    export.add_argument("--preferred-only", action="store_true")
+    export.set_defaults(
+        func=lambda args: export_priva_gof_tsv(
+            args.workbook_xlsx,
+            args.out_tsv,
+            args.preferred_only,
         )
     )
     return parser
